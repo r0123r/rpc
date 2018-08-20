@@ -1,7 +1,9 @@
-rpc
+rpc-json
 ===
-[![Build Status](https://travis-ci.org/gorilla/rpc.png?branch=master)](https://travis-ci.org/gorilla/rpc)
+Update gorilla/rpc/json for ExtJs/Direct/rpc
 
-gorilla/rpc is a foundation for RPC over HTTP services, providing access to the exported methods of an object through HTTP requests.
+Read the full documentation here: 
 
-Read the full documentation here: http://www.gorillatoolkit.org/pkg/rpc
+http://www.gorillatoolkit.org/pkg/rpc
+
+https://docs.sencha.com/extjs/6.0.2/guides/backend_connectors/direct/specification.html
