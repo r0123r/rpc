@@ -2,7 +2,7 @@
 // Copyright 2012 The Gorilla Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
-
+// r0123r - update for Extjs Direct rpc
 package json
 
 import (
@@ -24,10 +24,12 @@ type serverRequest struct {
 	// A String containing the name of the method to be invoked.
 	Method string `json:"method"`
 	// An Array of objects to pass as arguments to the method.
-	Params *json.RawMessage `json:"params"`
+	Params *json.RawMessage `json:"data"`
 	// The request id. This can be of any type. It is used to match the
 	// response with the request that it is replying to.
-	Id *json.RawMessage `json:"id"`
+	Id     *json.RawMessage `json:"tid"`
+	Type   string           `json:"type"`
+	Action string           `json:"action"`
 }
 
 // serverResponse represents a JSON-RPC response returned by the server.
@@ -35,11 +37,21 @@ type serverResponse struct {
 	// The Object that was returned by the invoked method. This must be null
 	// in case there was an error invoking the method.
 	Result interface{} `json:"result"`
+	// This must be the same id as the request it is responding to.
+	Id     *json.RawMessage `json:"tid"`
+	Type   string           `json:"type"`
+	Action string           `json:"action"`
+	Method string           `json:"method"`
+}
+type serverErrorResponse struct {
 	// An Error object if there was an error invoking the method. It must be
 	// null if there was no error.
-	Error interface{} `json:"error"`
+	Error interface{} `json:"message"`
 	// This must be the same id as the request it is responding to.
-	Id *json.RawMessage `json:"id"`
+	Id     *json.RawMessage `json:"tid"`
+	Type   string           `json:"type"`
+	Action string           `json:"action"`
+	Method string           `json:"method"`
 }
 
 // ----------------------------------------------------------------------------
@@ -84,7 +96,7 @@ type CodecRequest struct {
 // The method uses a dotted notation as in "Service.Method".
 func (c *CodecRequest) Method() (string, error) {
 	if c.err == nil {
-		return c.request.Method, nil
+		return c.request.Action + "." + c.request.Method, nil
 	}
 	return "", c.err
 }
@@ -92,14 +104,15 @@ func (c *CodecRequest) Method() (string, error) {
 // ReadRequest fills the request object for the RPC method.
 func (c *CodecRequest) ReadRequest(args interface{}) error {
 	if c.err == nil {
-		if c.request.Params != nil {
-			// JSON params is array value. RPC params is struct.
-			// Unmarshal into array containing the request struct.
-			params := [1]interface{}{args}
-			c.err = json.Unmarshal(*c.request.Params, &params)
+		params := [1]interface{}{args}
+		if c.request.Params == nil { //ExtDirect data=null
+			c.request.Params = &null
 		} else {
+
 			c.err = errors.New("rpc: method request ill-formed: missing params field")
 		}
+
+		c.err = json.Unmarshal(*c.request.Params, &params)
 	}
 	return c.err
 }
@@ -112,25 +125,33 @@ func (c *CodecRequest) WriteResponse(w http.ResponseWriter, reply interface{}, m
 	if c.err != nil {
 		return c.err
 	}
-	res := &serverResponse{
-		Result: reply,
-		Error:  &null,
-		Id:     c.request.Id,
-	}
 	if methodErr != nil {
-		// Propagate error message as string.
-		res.Error = methodErr.Error()
-		// Result must be null if there was an error invoking the method.
-		// http://json-rpc.org/wiki/specification#a1.2Response
-		res.Result = &null
-	}
-	if c.request.Id == nil {
-		// Id is null for notifications and they don't have a response.
-		res.Id = &null
-	} else {
+		res := &serverErrorResponse{
+			Error:  methodErr.Error(),
+			Id:     c.request.Id,
+			Action: c.request.Action,
+			Type:   "exception",
+			Method: c.request.Method,
+		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		encoder := json.NewEncoder(w)
-		c.err = encoder.Encode(res)
+		encoder.Encode(res)
+	} else {
+		res := &serverResponse{
+			Result: reply,
+			Id:     c.request.Id,
+			Action: c.request.Action,
+			Type:   c.request.Type,
+			Method: c.request.Method,
+		}
+		if c.request.Id == nil {
+			// Id is null for notifications and they don't have a response.
+			res.Id = &null
+		} else {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			encoder := json.NewEncoder(w)
+			encoder.Encode(res)
+		}
 	}
-	return c.err
+	return nil
 }
